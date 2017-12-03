@@ -32,7 +32,10 @@ class ErrorHandlerTest {
 	void testHandleWithStrictIgnoresGeneric() {
 		Consumer<Exception> ignoreMock = Mockito.mock(Consumer.class);
 
-		handler.addStrictTypeHandler(Exception.class, ignoreMock);
+		handler.withHandler(Exception.class)
+			.setCriteria(StandardCriteria.EXACT_TYPE_MATCH)
+			.setAction(ignoreMock)
+			.add();
 
 		handler.handle(new RuntimeException());
 
@@ -43,7 +46,10 @@ class ErrorHandlerTest {
 	void testHandleWithStrictRunsOnExactMatch() {
 		Consumer<IllegalArgumentException> callMock = Mockito.mock(Consumer.class);
 
-		handler.addStrictTypeHandler(IllegalArgumentException.class, callMock);
+		handler.withHandler(IllegalArgumentException.class)
+			.setCriteria(StandardCriteria.EXACT_TYPE_MATCH)
+			.setAction(callMock)
+			.add();
 
 		IllegalArgumentException exception = new IllegalArgumentException();
 		handler.handle(exception);
@@ -56,8 +62,14 @@ class ErrorHandlerTest {
 		Consumer<IllegalArgumentException> callMock = Mockito.mock(Consumer.class);
 		Consumer<Exception> ignoreMock = Mockito.mock(Consumer.class);
 
-		handler.addStrictTypeHandler(IllegalArgumentException.class, callMock);
-		handler.addStrictTypeHandler(Exception.class, ignoreMock);
+		handler.withHandler(IllegalArgumentException.class)
+			.setCriteria(StandardCriteria.EXACT_TYPE_MATCH)
+			.setAction(callMock)
+			.add();
+		handler.withHandler(Exception.class)
+			.setCriteria(StandardCriteria.EXACT_TYPE_MATCH)
+			.setAction(ignoreMock)
+			.add();
 
 		IllegalArgumentException exception = new IllegalArgumentException();
 		handler.handle(exception);
@@ -70,7 +82,10 @@ class ErrorHandlerTest {
 	void testHandleWithInstanceOfRunsGeneric() {
 		Consumer<Exception> mock = Mockito.mock(Consumer.class);
 
-		handler.addInstanceOfHandler(Exception.class, mock);
+		handler.withHandler(Exception.class)
+			.setCriteria(StandardCriteria.INSTANCE_OF)
+			.setAction(mock)
+			.add();
 
 		Exception exception = new RuntimeException();
 		handler.handle(exception);
@@ -82,7 +97,10 @@ class ErrorHandlerTest {
 	void testHandleWithInstanceOfRunsOnExactMatch() {
 		Consumer<IllegalArgumentException> callMock = Mockito.mock(Consumer.class);
 
-		handler.addInstanceOfHandler(IllegalArgumentException.class, callMock);
+		handler.withHandler(IllegalArgumentException.class)
+			.setCriteria(StandardCriteria.INSTANCE_OF)
+			.setAction(callMock)
+			.add();
 
 		IllegalArgumentException exception = new IllegalArgumentException();
 		handler.handle(exception);
@@ -95,8 +113,14 @@ class ErrorHandlerTest {
 		Consumer<IllegalArgumentException> exactMock = Mockito.mock(Consumer.class);
 		Consumer<Exception> genericMock = Mockito.mock(Consumer.class);
 
-		handler.addInstanceOfHandler(IllegalArgumentException.class, exactMock);
-		handler.addInstanceOfHandler(Exception.class, genericMock);
+		handler.withHandler(IllegalArgumentException.class)
+			.setCriteria(StandardCriteria.INSTANCE_OF)
+			.setAction(exactMock)
+			.add();
+		handler.withHandler(Exception.class)
+			.setCriteria(StandardCriteria.INSTANCE_OF)
+			.setAction(genericMock)
+			.add();
 
 		IllegalArgumentException exception = new IllegalArgumentException();
 		handler.handle(exception);
@@ -109,7 +133,10 @@ class ErrorHandlerTest {
 	void testFutureHandlerInCompletableFuture() throws InterruptedException, ExecutionException {
 		Consumer<IllegalArgumentException> callMock = Mockito.mock(Consumer.class);
 
-		handler.addStrictTypeHandler(IllegalArgumentException.class, callMock);
+		handler.withHandler(IllegalArgumentException.class)
+			.setCriteria(StandardCriteria.EXACT_TYPE_MATCH)
+			.setAction(callMock)
+			.add();
 
 		IllegalArgumentException exception = new IllegalArgumentException();
 		CompletableFuture.runAsync(() -> {
@@ -117,6 +144,44 @@ class ErrorHandlerTest {
 		}).exceptionally(handler.asFutureHandler()).get();
 
 		Mockito.verify(callMock, Mockito.times(1)).accept(exception);
+	}
+
+	@Test
+	void testHandleSkipIfHandledAcceptance() {
+		Consumer<IllegalArgumentException> ranMock = Mockito.mock(Consumer.class);
+		Consumer<Exception> ignoreMock = Mockito.mock(Consumer.class);
+
+		handler.withHandler(IllegalArgumentException.class)
+			.setCriteria(StandardCriteria.INSTANCE_OF)
+			.setAction(ranMock)
+			.add();
+		handler.withHandler(Exception.class)
+			.setCriteria(StandardCriteria.INSTANCE_OF)
+			.setAction(ignoreMock)
+			.skipIfHandled()
+			.add();
+
+		IllegalArgumentException exception = new IllegalArgumentException();
+		handler.handle(exception);
+
+		Mockito.verify(ranMock, Mockito.times(1)).accept(exception);
+		Mockito.verifyZeroInteractions(ignoreMock);
+	}
+
+	@Test
+	void testHandleSkipIfHandledWhenNotHandledIsRun() {
+		Consumer<IllegalArgumentException> ranMock = Mockito.mock(Consumer.class);
+
+		handler.withHandler(IllegalArgumentException.class)
+			.setCriteria(StandardCriteria.INSTANCE_OF)
+			.setAction(ranMock)
+			.skipIfHandled()
+			.add();
+
+		IllegalArgumentException exception = new IllegalArgumentException();
+		handler.handle(exception);
+
+		Mockito.verify(ranMock, Mockito.times(1)).accept(exception);
 	}
 
 }
