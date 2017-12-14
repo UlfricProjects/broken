@@ -3,6 +3,7 @@ package com.ulfric.broken;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -23,7 +24,8 @@ public final class ErrorHandler {
 
 	public <T> Function<Throwable, T> asFutureHandler() {
 		return thrown -> {
-			handle(thrown.getCause());
+			Throwable cause = thrown.getClass() == ExecutionException.class ? thrown.getCause() : thrown;
+			handle(cause);
 			return null;
 		};
 	}
