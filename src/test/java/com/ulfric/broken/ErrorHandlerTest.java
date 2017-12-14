@@ -1,6 +1,7 @@
 package com.ulfric.broken;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
@@ -139,9 +140,85 @@ class ErrorHandlerTest {
 			.add();
 
 		IllegalArgumentException exception = new IllegalArgumentException();
-		CompletableFuture.runAsync(() -> {
-			throw exception;
-		}).exceptionally(handler.asFutureHandler()).get();
+		throwing(exception).exceptionally(handler.asFutureHandler()).get();
+
+		Mockito.verify(callMock, Mockito.times(1)).accept(exception);
+	}
+
+	@Test
+	void testFutureHandlerInCompletableFutureWithFakeCause() throws InterruptedException, ExecutionException {
+		Consumer<IllegalArgumentException> callMock = Mockito.mock(Consumer.class);
+
+		handler.withHandler(IllegalArgumentException.class)
+			.setCriteria(StandardCriteria.EXACT_TYPE_MATCH)
+			.setAction(callMock)
+			.add();
+
+		RuntimeException inner = new RuntimeException();
+		IllegalArgumentException exception = new IllegalArgumentException(inner);
+		throwing(exception).exceptionally(handler.asFutureHandler()).get();
+
+		Mockito.verify(callMock, Mockito.times(1)).accept(exception);
+	}
+
+	@Test
+	void testFutureHandlerInCompletableFutureThrowingCompletionException() throws InterruptedException, ExecutionException {
+		Consumer<CompletionException> callMock = Mockito.mock(Consumer.class);
+
+		handler.withHandler(CompletionException.class)
+			.setCriteria(StandardCriteria.EXACT_TYPE_MATCH)
+			.setAction(callMock)
+			.add();
+
+		CompletionException exception = new CompletionException(null);
+		throwing(exception).exceptionally(handler.asFutureHandler()).get();
+
+		Mockito.verify(callMock, Mockito.times(1)).accept(exception);
+	}
+
+	@Test
+	void testFutureHandlerInCompletableFutureThrowingExecutionException() throws InterruptedException, ExecutionException {
+		Consumer<ExecutionException> callMock = Mockito.mock(Consumer.class);
+
+		handler.withHandler(ExecutionException.class)
+			.setCriteria(StandardCriteria.EXACT_TYPE_MATCH)
+			.setAction(callMock)
+			.add();
+
+		ExecutionException exception = new ExecutionException(null);
+		throwing(exception).exceptionally(handler.asFutureHandler()).get();
+
+		Mockito.verify(callMock, Mockito.times(1)).accept(exception);
+	}
+
+	@Test
+	void testFutureHandlerInCompletableFutureThrowingCompletionExceptionWrappingReal() throws InterruptedException, ExecutionException {
+		Consumer<IllegalArgumentException> callMock = Mockito.mock(Consumer.class);
+
+		handler.withHandler(IllegalArgumentException.class)
+			.setCriteria(StandardCriteria.EXACT_TYPE_MATCH)
+			.setAction(callMock)
+			.add();
+
+		IllegalArgumentException exception = new IllegalArgumentException();
+		CompletionException throwing = new CompletionException(exception);
+		throwing(throwing).exceptionally(handler.asFutureHandler()).get();
+
+		Mockito.verify(callMock, Mockito.times(1)).accept(exception);
+	}
+
+	@Test
+	void testFutureHandlerInCompletableFutureThrowingExecutionExceptionWrappingReal() throws InterruptedException, ExecutionException {
+		Consumer<IllegalArgumentException> callMock = Mockito.mock(Consumer.class);
+
+		handler.withHandler(IllegalArgumentException.class)
+			.setCriteria(StandardCriteria.EXACT_TYPE_MATCH)
+			.setAction(callMock)
+			.add();
+
+		IllegalArgumentException exception = new IllegalArgumentException();
+		ExecutionException throwing = new ExecutionException(exception);
+		throwing(throwing).exceptionally(handler.asFutureHandler()).get();
 
 		Mockito.verify(callMock, Mockito.times(1)).accept(exception);
 	}
@@ -182,6 +259,12 @@ class ErrorHandlerTest {
 		handler.handle(exception);
 
 		Mockito.verify(ranMock, Mockito.times(1)).accept(exception);
+	}
+
+	private CompletableFuture<Void> throwing(Throwable thrown) {
+		CompletableFuture<Void> throwing = CompletableFuture.completedFuture(null);
+		throwing.obtrudeException(thrown);
+		return throwing;
 	}
 
 }

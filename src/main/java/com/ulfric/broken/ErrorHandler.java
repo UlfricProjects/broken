@@ -1,13 +1,14 @@
 package com.ulfric.broken;
 
+import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.List;
+import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
-import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 public final class ErrorHandler {
 
@@ -17,17 +18,34 @@ public final class ErrorHandler {
 		Objects.requireNonNull(thrown, "thrown");
 
 		Problem problem = new Problem(thrown);
-		handlers.stream().filter(handler -> handler.criteria.test(problem))
+		handlers.stream()
+				.map(handler -> new SimpleImmutableEntry<>(handler, handler.criteria.apply(thrown)))
+				.filter(entry -> entry.getValue().toInt() > 0)
+				.sorted((o1, o2) -> Integer.compare(o2.getValue().toInt(), o1.getValue().toInt()))
+				.map(Entry::getKey)
 				.map(handler -> handler.action)
 				.forEach(action -> action.accept(problem));
 	}
 
 	public <T> Function<Throwable, T> asFutureHandler() {
 		return thrown -> {
-			Throwable cause = thrown.getClass() == ExecutionException.class ? thrown.getCause() : thrown;
+			Throwable cause = unwrapGenericException(thrown);
 			handle(cause);
 			return null;
 		};
+	}
+
+	private Throwable unwrapGenericException(Throwable thrown) {
+		if (thrown.getCause() == null) {
+			return thrown;
+		}
+
+		Class<?> type = thrown.getClass();
+		if (type == ExecutionException.class || type == CompletionException.class) {
+			return unwrapGenericException(thrown.getCause());
+		}
+
+		return thrown;
 	}
 
 	public <X extends Throwable> HandlerBuilder<X> withHandler(Class<X> type) {
@@ -38,7 +56,7 @@ public final class ErrorHandler {
 
 	public final class HandlerBuilder<X extends Throwable> {
 		private final Class<X> type;
-		private BiPredicate<Class<? extends Throwable>, Throwable> criteria;
+		private Criteria criteria;
 		private Consumer<X> action;
 		private boolean skipIfHandled;
 
@@ -54,7 +72,7 @@ public final class ErrorHandler {
 			handlers.add(handler);
 		}
 
-		public HandlerBuilder<X> setCriteria(BiPredicate<Class<? extends Throwable>, Throwable> criteria) {
+		public HandlerBuilder<X> setCriteria(Criteria criteria) {
 			this.criteria = criteria;
 			return this;
 		}
@@ -74,43 +92,35 @@ public final class ErrorHandler {
 		}
 	}
 
-	private Handler createHandler(Class<? extends Throwable> type,
-			BiPredicate<Class<? extends Throwable>, Throwable> criteria, Consumer<? extends Throwable> action,
+	private Handler createHandler(Class<? extends Throwable> type, Criteria criteria, Consumer<? extends Throwable> action,
 			boolean skipIfHandled) {
 
-		Predicate<Problem> problemCriteria = createProblemCriteria(type, criteria, skipIfHandled);
-		Consumer<Problem> problemAction = createProblemAction(action);
-		return new Handler(problemCriteria, problemAction);
+		Function<Throwable, MatchLevel> handlerCriteria = createHandlerCriteria(type, criteria);
+		Consumer<Problem> handlerAction = createHandlerAction(action, skipIfHandled);
+		return new Handler(handlerCriteria, handlerAction);
 	}
 
-	private Predicate<Problem> createProblemCriteria(Class<? extends Throwable> type,
-			BiPredicate<Class<? extends Throwable>, Throwable> criteria, boolean skipIfHandled) {
-
-		return problem -> {
-			if (skipIfHandled) {
-				if (problem.handled) {
-					return false;
-				}
-			}
-
-			return criteria.test(type, problem.cause);
-		};
+	private Function<Throwable, MatchLevel> createHandlerCriteria(Class<? extends Throwable> type, Criteria criteria) {
+		return thrown -> criteria.apply(type, thrown);
 	}
 
 	@SuppressWarnings("unchecked")
-	private Consumer<Problem> createProblemAction(Consumer<? extends Throwable> action) {
-		Consumer<Problem> problemAction = problem -> {
-			problem.handled = true;
-		};
+	private Consumer<Problem> createHandlerAction(Consumer<? extends Throwable> action, boolean skipIfHandled) {
+		return problem -> {
+			if (skipIfHandled && problem.handled) {
+				return;
+			}
 
-		return problemAction.andThen(problem -> ((Consumer<Throwable>) action).accept(problem.cause));
+			problem.handled = true;
+			((Consumer<Throwable>) action).accept(problem.cause);
+		};
 	}
 
 	private static final class Handler {
-		final Predicate<Problem> criteria;
+		final Function<Throwable, MatchLevel> criteria;
 		final Consumer<Problem> action;
 
-		Handler(Predicate<Problem> criteria, Consumer<Problem> action) {
+		Handler(Function<Throwable, MatchLevel> criteria, Consumer<Problem> action) {
 			this.criteria = criteria;
 			this.action = action;
 		}

@@ -8,7 +8,7 @@ class StandardCriteriaTest {
 
 	@Test
 	void testMatchEverythingIsTrue() {
-		Truth.assertThat(StandardCriteria.MATCH_EVERYTHING.test(null, null)).isTrue();
+		Truth.assertThat(StandardCriteria.MATCH_EVERYTHING.apply(null, null)).isSameAs(StandardMatchLevels.PERFECT_MATCH);
 	}
 
 }
